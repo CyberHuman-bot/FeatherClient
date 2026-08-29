@@ -53,39 +53,27 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// SEARCH ROUTE HANDLER (Browser Input Route)
+// CORE RENDER / SEARCH LOGIC
 // ==========================================
-app.get('/search', (req, res) => {
-    let query = req.query.url || req.query.q || req.query.search;
+async function handleRender(req, res) {
+    // Read from any possible query parameter name
+    let target = req.query.url || req.query.q || req.query.search;
 
-    if (!query) {
+    if (!target) {
         return res.redirect('/');
     }
 
-    query = query.trim();
-
-    // Check if input is a direct URL or search query
+    target = target.trim();
     let targetUrl;
-    if (query.startsWith('http://') || query.startsWith('https://')) {
-        targetUrl = query;
-    } else if (query.includes('.') && !query.includes(' ')) {
-        targetUrl = 'https://' + query;
+
+    // Format query into valid URL or search engine payload
+    if (target.startsWith('http://') || target.startsWith('https://')) {
+        targetUrl = target;
+    } else if (target.includes('.') && !target.includes(' ')) {
+        targetUrl = 'https://' + target;
     } else {
-        // Direct plain text queries to DuckDuckGo HTML Lite
-        targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-    }
-
-    res.redirect(`/render?url=${encodeURIComponent(targetUrl)}`);
-});
-
-// ==========================================
-// 1. HTML COMPRESSOR RENDERER
-// ==========================================
-app.get('/render', async (req, res) => {
-    const targetUrl = req.query.url;
-
-    if (!targetUrl) {
-        return res.status(400).send('Error: Missing url parameter');
+        // Route plain text queries through DuckDuckGo HTML Lite
+        targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(target)}`;
     }
 
     try {
@@ -159,17 +147,24 @@ app.get('/render', async (req, res) => {
     } catch (err) {
         res.status(500).send(`FeatherNet Proxy Error: ${err.message}`);
     }
-});
+}
+
+// Bind both endpoints to core renderer
+app.get('/search', handleRender);
+app.get('/render', handleRender);
 
 // ==========================================
-// 2. JSON API ENDPOINT (For Native Clients)
+// JSON API ENDPOINT (For Native Clients)
 // ==========================================
 app.get('/api/v1/page', async (req, res) => {
-    const targetUrl = req.query.url;
+    let target = req.query.url || req.query.q || req.query.search;
 
-    if (!targetUrl) {
+    if (!target) {
         return res.status(400).json({ error: 'Missing url parameter' });
     }
+
+    target = target.trim();
+    let targetUrl = (target.startsWith('http://') || target.startsWith('https://')) ? target : 'https://' + target;
 
     try {
         const response = await axios.get(targetUrl, {
@@ -221,7 +216,7 @@ app.get('/api/v1/page', async (req, res) => {
 });
 
 // ==========================================
-// 3. LOW-BANDWIDTH AUDIO STREAM PROXY
+// LOW-BANDWIDTH AUDIO STREAM PROXY
 // ==========================================
 app.get('/audio-proxy', (req, res) => {
     const audioUrl = req.query.url;
