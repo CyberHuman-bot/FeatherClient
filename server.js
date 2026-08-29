@@ -3,21 +3,20 @@ const axios = require('axios');
 const { JSDOM } = require('jsdom');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
+const path = require('path');
 
-// Configure ffmpeg path
+// Configure ffmpeg binary path
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Initialize Express App
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// Middleware & Static File Serving
 app.use(express.json());
-app.use(express.static('public')); // Serves web client from /public
+app.use(express.static('public')); // Serves public/index.html
 
-// ==========================================
-// HELPER: Extract Alignment & Background Colors
-// ==========================================
+// Helper function to extract and preserve background color and alignment
 function extractEssentialStyles(el) {
     let styles = [];
 
@@ -32,7 +31,7 @@ function extractEssentialStyles(el) {
     const alignMatch = inlineStyle.match(/text-align\s*:\s*([^;]+)/i);
     if (alignMatch) styles.push(`text-align:${alignMatch[1].trim()}`);
 
-    // 2. Fall back to legacy HTML attributes
+    // 2. Check legacy HTML attributes
     const legacyAlign = el.getAttribute('align');
     if (legacyAlign && !alignMatch) {
         styles.push(`text-align:${legacyAlign.toLowerCase()}`);
@@ -45,6 +44,39 @@ function extractEssentialStyles(el) {
 
     return styles.length > 0 ? styles.join(';') : null;
 }
+
+// ==========================================
+// ROOT ROUTE (Web Client Fallback)
+// ==========================================
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// ==========================================
+// SEARCH ROUTE HANDLER (Browser Input Route)
+// ==========================================
+app.get('/search', (req, res) => {
+    let query = req.query.url || req.query.q || req.query.search;
+
+    if (!query) {
+        return res.redirect('/');
+    }
+
+    query = query.trim();
+
+    // Check if input is a direct URL or search query
+    let targetUrl;
+    if (query.startsWith('http://') || query.startsWith('https://')) {
+        targetUrl = query;
+    } else if (query.includes('.') && !query.includes(' ')) {
+        targetUrl = 'https://' + query;
+    } else {
+        // Direct plain text queries to DuckDuckGo HTML Lite
+        targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    }
+
+    res.redirect(`/render?url=${encodeURIComponent(targetUrl)}`);
+});
 
 // ==========================================
 // 1. HTML COMPRESSOR RENDERER
@@ -70,7 +102,7 @@ app.get('/render', async (req, res) => {
         setTimeout(() => {
             const document = dom.window.document;
 
-            // Route audio elements through local proxy
+            // Route audio elements through audio proxy
             const audioElements = document.querySelectorAll('audio, audio source');
             audioElements.forEach(audio => {
                 const rawSrc = audio.getAttribute('src');
@@ -80,7 +112,7 @@ app.get('/render', async (req, res) => {
                 }
             });
 
-            // Preserve background colors & text alignment before stripping styles
+            // Preserve essential styles (alignments & bg colors)
             const allElements = document.querySelectorAll('body *');
             allElements.forEach(el => {
                 const preserved = extractEssentialStyles(el);
@@ -90,12 +122,11 @@ app.get('/render', async (req, res) => {
                     el.removeAttribute('style');
                 }
                 
-                // Clean legacy attributes after inline conversion
                 el.removeAttribute('align');
                 el.removeAttribute('bgcolor');
             });
 
-            // Strip heavy clutter
+            // Strip clutter (CSS files, SVGs, scripts, canvas)
             const clutter = document.querySelectorAll('script, style, iframe, svg, canvas, link[rel="stylesheet"]');
             clutter.forEach(el => el.remove());
 
@@ -131,7 +162,7 @@ app.get('/render', async (req, res) => {
 });
 
 // ==========================================
-// 2. JSON API ENDPOINT (For KaiOS / Native Apps)
+// 2. JSON API ENDPOINT (For Native Clients)
 // ==========================================
 app.get('/api/v1/page', async (req, res) => {
     const targetUrl = req.query.url;
@@ -164,7 +195,7 @@ app.get('/api/v1/page', async (req, res) => {
                 });
             });
 
-            // Extract text/layout blocks with preserved styles
+            // Extract text/layout blocks with essential styles preserved
             const blocks = [];
             document.querySelectorAll('p, h1, h2, h3, h4, li, div').forEach(el => {
                 const style = extractEssentialStyles(el);
@@ -190,7 +221,7 @@ app.get('/api/v1/page', async (req, res) => {
 });
 
 // ==========================================
-// 3. LOW-BANDWIDTH AUDIO PROXY
+// 3. LOW-BANDWIDTH AUDIO STREAM PROXY
 // ==========================================
 app.get('/audio-proxy', (req, res) => {
     const audioUrl = req.query.url;
