@@ -7,13 +7,12 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: monospace;
+            font-family: monospace, sans-serif;
             background-color: #121212;
             color: #e0e0e0;
-            padding: 6px;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            padding: 4px;
+            font-size: 13px;
+            line-height: 1.3;
         }
 
         /* Top Bar */
@@ -21,196 +20,135 @@
             display: flex;
             gap: 4px;
             margin-bottom: 6px;
-            position: sticky;
-            top: 0;
-            background: #121212;
-            padding-bottom: 4px;
-            z-index: 100;
+            background: #1e1e1e;
+            padding: 4px;
+            border-bottom: 1px solid #333;
         }
         input[type="text"] {
             flex: 1;
-            padding: 8px;
-            background: #1e1e1e;
+            padding: 6px;
+            background: #121212;
             color: #55ff55;
-            border: 1px solid #333;
+            border: 1px solid #444;
             font-family: monospace;
-            font-size: 14px;
-            outline: none;
+            font-size: 13px;
         }
         button {
-            padding: 8px 12px;
+            padding: 6px 10px;
             background: #0066cc;
             color: #ffffff;
             border: none;
-            font-family: monospace;
             font-weight: bold;
+            font-size: 12px;
         }
 
-        /* Viewport Canvas */
+        /* Viewport Canvas (Native document flow, no scrollable div) */
         #viewport {
-            border: 1px solid #333;
-            padding: 8px;
-            background: #1a1a1a;
-            flex: 1;
-            overflow-y: auto;
             word-wrap: break-word;
+            padding: 2px;
         }
 
-        #viewport img, #viewport video { max-width: 100%; height: auto; }
+        #viewport img, #viewport video { max-width: 100%; height: auto; display: block; margin: 4px 0; }
         #viewport a { 
             color: #4da6ff; 
             text-decoration: underline; 
-            margin: 3px 0; 
             display: inline-block; 
-            padding: 2px 4px;
+            margin: 2px 0;
+            padding: 2px;
         }
-        #viewport audio { width: 100%; margin: 8px 0; background: #222; }
+        #viewport audio { width: 100%; margin: 6px 0; }
 
         .status {
-            font-size: 11px;
-            color: #888;
+            font-size: 10px;
+            color: #aaa;
             margin-bottom: 4px;
+            background: #222;
+            padding: 2px 4px;
         }
 
-        /* Highly Visible D-Pad Focus Ring */
-        .focusable:focus, a:focus, input:focus, button:focus {
+        /* High-contrast focus states for hardware D-Pad */
+        :focus, .focusable:focus, a:focus, input:focus, button:focus {
             outline: 2px solid #55ff55 !important;
-            background-color: #223322 !important;
+            background-color: #224422 !important;
             color: #ffffff !important;
         }
     </style>
 </head>
 <body>
 
-    <!-- Top Navigation Bar -->
+    <!-- Native HTTP Form Submission -->
     <form action="/search" method="GET" class="bar" id="searchForm">
         <input type="text" name="q" id="urlInput" class="focusable" placeholder="URL or Search..." tabindex="1" required>
         <button type="submit" id="goBtn" class="focusable" tabindex="2">GO</button>
     </form>
 
-    <div id="status" class="status">D-Pad Ready [F1/*: Search | F2/#: Back]</div>
+    <div id="status" class="status">[1/*: Focus Search | 2/#: Back | D-Pad: Navigate]</div>
 
-    <!-- Main Content Canvas -->
-    <div id="viewport">Enter a URL above to load via FeatherNet backend.</div>
+    <!-- Main Content Stream -->
+    <div id="viewport">
+        <!-- FeatherNet server injects stripped HTML content here -->
+    </div>
 
     <script>
-        const urlInput = document.getElementById('urlInput');
-        const viewport = document.getElementById('viewport');
-        const statusEl = document.getElementById('status');
-        const searchForm = document.getElementById('searchForm');
+        (function() {
+            var urlInput = document.getElementById('urlInput');
+            var statusEl = document.getElementById('status');
+            var focusIndex = 0;
+            var focusables = [];
 
-        let focusIndex = 0;
-        let focusableElements = [];
-
-        // Intercept form submission to load via AJAX without page reload
-        searchForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const query = urlInput.value.trim();
-            if (query) {
-                fetchPage(query);
+            function refreshFocusables() {
+                var elems = document.querySelectorAll('input, button, a, audio, .focusable');
+                focusables = [];
+                for (var i = 0; i < elems.length; i++) {
+                    elems[i].setAttribute('tabindex', i + 1);
+                    focusables.push(elems[i]);
+                }
             }
-        });
 
-        function updateFocusables() {
-            // Gather all interactive D-Pad elements
-            focusableElements = Array.from(document.querySelectorAll('.focusable, a, button, input, audio'));
-            focusableElements.forEach((el, idx) => {
-                el.setAttribute('tabindex', idx + 1);
-            });
-        }
+            // Bind hardware keycode fallbacks for Mocor RTOS / Nokia D-Pad
+            window.addEventListener('keydown', function(e) {
+                refreshFocusables();
 
-        function fetchPage(query) {
-            statusEl.innerText = 'Status: Fetching via FeatherNet...';
-            viewport.innerHTML = '<div style="color: #888;">Compressing page...</div>';
+                var key = e.key || e.keyCode;
 
-            fetch(`/search?q=${encodeURIComponent(query)}`)
-                .then(res => {
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    return res.text();
-                })
-                .then(html => {
-                    statusEl.innerText = `Loaded: ${query}`;
-                    viewport.innerHTML = html;
-
-                    // Intercept link clicks to keep routing through FeatherNet
-                    const links = viewport.querySelectorAll('a');
-                    links.forEach(a => {
-                        a.classList.add('focusable');
-                        a.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            const href = a.getAttribute('href');
-                            if (href) {
-                                fetchPage(href);
-                            }
-                        });
-                    });
-
-                    updateFocusables();
-                    focusIndex = 0;
-                    if (focusableElements.length > 0) {
-                        focusableElements[0].focus();
+                // Dedicated Keypad Shortcuts (F1, '*', SoftLeft, key '1')
+                if (key === 'F1' || key === '*' || key === 'SoftLeft' || key === 112 || key === 49) {
+                    if (document.activeElement !== urlInput) {
+                        e.preventDefault();
+                        urlInput.focus();
+                        urlInput.select();
+                        focusIndex = 0;
                     }
-                })
-                .catch(err => {
-                    statusEl.innerText = 'Status: Connection Error';
-                    viewport.innerHTML = `<div style="color: #ff5555;">Error: ${err.message}</div>`;
-                });
-        }
+                }
 
-        // Hardware D-Pad and Nokia Keypad Event Handler
-        window.addEventListener('keydown', (e) => {
-            updateFocusables();
-
-            switch(e.key) {
-                case 'ArrowDown':
-                    e.preventDefault();
-                    if (focusIndex < focusableElements.length - 1) {
-                        focusIndex++;
-                        focusableElements[focusIndex].focus();
-                        focusableElements[focusIndex].scrollIntoView({ block: 'nearest' });
-                    } else {
-                        viewport.scrollBy(0, 80);
-                    }
-                    break;
-
-                case 'ArrowUp':
-                    e.preventDefault();
-                    if (focusIndex > 0) {
-                        focusIndex--;
-                        focusableElements[focusIndex].focus();
-                        focusableElements[focusIndex].scrollIntoView({ block: 'nearest' });
-                    } else {
-                        viewport.scrollBy(0, -80);
-                    }
-                    break;
-
-                // Dedicated Keypad Shortcuts
-                case 'SoftLeft':
-                case 'F1':
-                case '*':
-                    e.preventDefault();
-                    urlInput.focus();
-                    focusIndex = 0;
-                    break;
-
-                case 'SoftRight':
-                case 'F2':
-                case '#':
+                // Back Shortcuts (F2, '#', SoftRight, key '2')
+                if (key === 'F2' || key === '#' || key === 'SoftRight' || key === 113 || key === 50) {
                     e.preventDefault();
                     window.history.back();
-                    break;
+                }
 
-                case 'Enter':
-                    // Trigger click on currently focused D-Pad element
-                    if (document.activeElement && document.activeElement !== urlInput) {
-                        document.activeElement.click();
+                // Up / Down D-Pad scroll fallback
+                if (key === 'ArrowDown' || key === 40) {
+                    if (focusIndex < focusables.length - 1) {
+                        focusIndex++;
+                        focusables[focusIndex].focus();
+                    } else {
+                        window.scrollBy(0, 50);
                     }
-                    break;
-            }
-        });
+                }
 
-        // Initialize focus list on load
-        updateFocusables();
+                if (key === 'ArrowUp' || key === 38) {
+                    if (focusIndex > 0) {
+                        focusIndex--;
+                        focusables[focusIndex].focus();
+                    } else {
+                        window.scrollBy(0, -50);
+                    }
+                }
+            });
+
+            refreshFocusables();
+        })();
     </script>
 </body>
 </html>
