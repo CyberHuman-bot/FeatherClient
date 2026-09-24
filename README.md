@@ -1,6 +1,6 @@
 # FeatherNet
 
-**FeatherNet** is an ultra-lightweight, low-bandwidth web runtime and proxy engine designed for low-spec hardware, feature phones (S30+, KaiOS, Mocor RTOS), and resource-constrained devices.
+**FeatherNet** is a 100% Vibe coded ultra-lightweight, low-bandwidth web runtime and proxy engine designed for low-spec hardware, feature phones (S30+, KaiOS, Mocor RTOS), and resource-constrained devices.
 
 By offloading heavy DOM parsing, layout rendering, JavaScript execution, and media compression to a Node.js backend, FeatherNet delivers fast, responsive web content over 2G/3G/4G networks with near-zero RAM footprint on the client device.
 
