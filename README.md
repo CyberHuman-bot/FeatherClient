@@ -44,7 +44,7 @@ By offloading heavy DOM parsing, layout rendering, JavaScript execution, and med
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/CyberHuman-bot/feathernet.git
+git clone https://github.com/CyberHuman-bot/featherclient.git
 cd feathernet
 
 ```
